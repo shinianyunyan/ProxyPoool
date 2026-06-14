@@ -1,0 +1,11 @@
+fofa:
+  email: "your_email@example.com"  # FOFA邮箱，请替换为你的
+  key: "your_fofa_api_key_here"    # FOFA API Key，请替换为你的
+
+# FOFA查询语法
+fofa_query: 'title="代理池网页管理界面" || body="pending_proxies_cnt"'
+
+# 文件路径配置
+paths:
+  proxy_pool: "proxyPool.txt"  # 代理池文件路径
+  proxy_api: "proxyAPI.txt"    # API列表文件路径

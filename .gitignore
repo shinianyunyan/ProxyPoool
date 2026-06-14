@@ -1,0 +1,35 @@
+# Claude Code 配置目录
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 敏感配置文件（包含真实密钥时不要提交）
+fetchProxy/config.yaml
+
+# 代理数据文件（运行时生成）
+valid_proxies.json
+proxyPool.txt
+proxyAPI.txt
+fetchProxy/update_status.txt
+
+# OS
+.DS_Store
+Thumbs.db

@@ -12,6 +12,7 @@ import (
 
 func init() {
 	proxy.RegisterDialer("anytls", NewAnyTLSDialer)
+	proxy.RegisterDialer("anytlsc", NewClearTextDialer)
 }
 
 func NewAnyTLSDialer(s string, d proxy.Dialer) (proxy.Dialer, error) {
@@ -21,6 +22,15 @@ func NewAnyTLSDialer(s string, d proxy.Dialer) (proxy.Dialer, error) {
 	}
 	a.tlsConfig, err = loadClientTLSConfig(a.serverName, a.certFile, a.skipVerify)
 	return a, err
+}
+
+func NewClearTextDialer(s string, d proxy.Dialer) (proxy.Dialer, error) {
+	a, err := NewAnyTLS(s, d, nil)
+	if err != nil {
+		return nil, fmt.Errorf("[anytlsc] create instance error: %s", err)
+	}
+	a.withTLS = false
+	return a, nil
 }
 
 func (s *AnyTLS) Dial(network, addr string) (net.Conn, error) {
@@ -63,18 +73,22 @@ func (s *AnyTLS) newClientSession() (*session, error) {
 		log.F("[anytls] dial to %s error: %s", s.addr, err)
 		return nil, err
 	}
-	tc := tls.Client(rc, s.tlsConfig)
-	if err := tc.Handshake(); err != nil {
-		_ = rc.Close()
+	c := rc
+	if s.withTLS {
+		tc := tls.Client(rc, s.tlsConfig)
+		if err := tc.Handshake(); err != nil {
+			_ = rc.Close()
+			return nil, err
+		}
+		c = tc
+	}
+	if err := writeAuth(c, s.password, s.padding.authPaddingLen()); err != nil {
+		_ = c.Close()
 		return nil, err
 	}
-	if err := writeAuth(tc, s.password, s.padding.authPaddingLen()); err != nil {
-		_ = tc.Close()
-		return nil, err
-	}
-	ss := newSession(tc)
+	ss := newSession(c)
 	if err := ss.writeFrame(frame{command: cmdSettings, data: clientSettings(s.padding)}); err != nil {
-		_ = tc.Close()
+		_ = c.Close()
 		return nil, err
 	}
 	ss.start()

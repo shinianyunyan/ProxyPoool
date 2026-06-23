@@ -20,10 +20,12 @@ type AnyTLS struct {
 
 	addr       string
 	password   string
+	withTLS    bool
 	serverName string
 	skipVerify bool
 	certFile   string
 	keyFile    string
+	fallback   string
 	tlsConfig  *tls.Config
 
 	synackTimeout time.Duration
@@ -41,10 +43,12 @@ func NewAnyTLS(s string, d proxy.Dialer, p proxy.Proxy) (*AnyTLS, error) {
 		proxy:         p,
 		addr:          u.Host,
 		password:      u.User.Username(),
+		withTLS:       true,
 		serverName:    query.Get("serverName"),
 		skipVerify:    query.Get("skipVerify") == "true",
 		certFile:      query.Get("cert"),
 		keyFile:       query.Get("key"),
+		fallback:      query.Get("fallback"),
 		synackTimeout: 10 * time.Second,
 	}
 	if a.password == "" {
@@ -103,8 +107,10 @@ func init() {
 	proxy.AddUsage("anytls", `
 AnyTLS client scheme:
   anytls://password@host:port[?serverName=SERVERNAME][&skipVerify=true][&cert=PATH][&synackTimeout=10s]
+  anytlsc://password@host:port     (cleartext, without TLS)
 
 AnyTLS server scheme:
-  anytls://password@host:port?cert=PATH&key=PATH
+  anytls://password@host:port?cert=PATH&key=PATH[&fallback=127.0.0.1:80]
+  anytlsc://password@host:port[?fallback=127.0.0.1:80]     (cleartext, without TLS)
 `)
 }

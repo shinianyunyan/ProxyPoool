@@ -1,9 +1,11 @@
 package anytls
 
 import (
+	"bytes"
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 
@@ -14,6 +16,7 @@ import (
 
 func init() {
 	proxy.RegisterServer("anytls", NewAnyTLSServer)
+	proxy.RegisterServer("anytlsc", NewClearTextServer)
 }
 
 func NewAnyTLSServer(s string, p proxy.Proxy) (proxy.Server, error) {
@@ -32,6 +35,15 @@ func NewAnyTLSServer(s string, p proxy.Proxy) (proxy.Server, error) {
 	return a, nil
 }
 
+func NewClearTextServer(s string, p proxy.Proxy) (proxy.Server, error) {
+	a, err := NewAnyTLS(s, nil, p)
+	if err != nil {
+		return nil, fmt.Errorf("[anytlsc] create instance error: %s", err)
+	}
+	a.withTLS = false
+	return a, nil
+}
+
 func (s *AnyTLS) ListenAndServe() {
 	l, err := net.Listen("tcp", s.addr)
 	if err != nil {
@@ -40,7 +52,7 @@ func (s *AnyTLS) ListenAndServe() {
 	}
 	defer l.Close()
 
-	log.F("[anytls] listening TCP on %s", s.addr)
+	log.F("[anytls] listening TCP on %s, with TLS: %v", s.addr, s.withTLS)
 	for {
 		c, err := l.Accept()
 		if err != nil {
@@ -52,19 +64,27 @@ func (s *AnyTLS) ListenAndServe() {
 }
 
 func (s *AnyTLS) Serve(c net.Conn) {
-	tlsConn := tls.Server(c, s.tlsConfig)
-	if err := tlsConn.Handshake(); err != nil {
-		_ = tlsConn.Close()
-		log.F("[anytls] error in tls handshake: %s", err)
-		return
+	if s.withTLS {
+		tlsConn := tls.Server(c, s.tlsConfig)
+		if err := tlsConn.Handshake(); err != nil {
+			_ = tlsConn.Close()
+			log.F("[anytls] error in tls handshake: %s", err)
+			return
+		}
+		c = tlsConn
 	}
-	if err := readAuth(tlsConn, s.password); err != nil {
-		_ = tlsConn.Close()
+	headBuf := bytes.NewBuffer(nil)
+	if err := readAuth(io.TeeReader(c, headBuf), s.password); err != nil {
+		if s.fallback != "" {
+			s.serveFallback(c, s.fallback, headBuf)
+			return
+		}
+		_ = c.Close()
 		log.F("[anytls] auth error from %s: %s", c.RemoteAddr(), err)
 		return
 	}
 
-	ss := newSession(tlsConn)
+	ss := newSession(c)
 	ss.start()
 	for {
 		st, err := ss.acceptStream()
@@ -73,6 +93,28 @@ func (s *AnyTLS) Serve(c net.Conn) {
 			return
 		}
 		go s.serveStream(ss, st)
+	}
+}
+
+func (s *AnyTLS) serveFallback(c net.Conn, target string, headBuf *bytes.Buffer) {
+	defer c.Close()
+
+	dialer := s.proxy.NextDialer(target)
+	rc, err := dialer.Dial("tcp", target)
+	if err != nil {
+		log.F("[anytls-fallback] %s <-> %s via %s, error in dial: %v", c.RemoteAddr(), target, dialer.Addr(), err)
+		return
+	}
+	defer rc.Close()
+
+	if _, err := rc.Write(headBuf.Bytes()); err != nil {
+		log.F("[anytls-fallback] write to rc error: %v", err)
+		return
+	}
+
+	log.F("[anytls-fallback] %s <-> %s via %s", c.RemoteAddr(), target, dialer.Addr())
+	if err := proxy.Relay(c, rc); err != nil {
+		log.F("[anytls-fallback] %s <-> %s via %s, relay error: %v", c.RemoteAddr(), target, dialer.Addr(), err)
 	}
 }
 

@@ -85,6 +85,9 @@ listen=127.0.0.1:8443
 # trojanc server (trojan without tls)
 # listen=trojanc://PASSWORD@:1234?fallback=127.0.0.1
 
+# anytls server
+# listen=anytls://PASSWORD@:8443?cert=/path/to/cert&key=/path/to/key
+
 # FORWARDERS
 # ----------
 # Forwarders, we can setup multiple forwarders.
@@ -126,6 +129,9 @@ listen=127.0.0.1:8443
 
 # trojanc as forwarder
 # forward=trojanc://PASSWORD@1.1.1.1:8080
+
+# anytls as forwarder
+# forward=anytls://PASSWORD@1.1.1.1:8443[?serverName=SERVERNAME][&skipVerify=true]
 
 # vless forwarder
 # forward=vless://5a146038-0b56-4e95-b1dc-5c6f5a32cd98@1.1.1.1:443

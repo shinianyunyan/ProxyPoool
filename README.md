@@ -54,6 +54,7 @@ we can set up local listeners as proxy servers, and forward requests to internet
 |SS             |√|√|√|√|client & server
 |Trojan         |√|√|√|√|client & server
 |Trojanc        |√|√|√|√|trojan cleartext(without tls)
+|AnyTLS         |√| |√| |client & server
 |VLESS          |√|√|√|√|client & server
 |VMess          | | |√|√|client only
 |SSR            | | |√| |client only
@@ -197,8 +198,8 @@ URL:
          -forward socks5://serverA:1080,socks5://serverB:1080           (proxy chain)
 
 SCHEME:
-   listen : http kcp mixed pxyproto redir redir6 smux sni socks5 ss tcp tls tproxy trojan trojanc udp unix vless vsock ws wss
-   forward: direct http kcp reject simple-obfs smux socks4 socks4a socks5 ss ssh ssr tcp tls trojan trojanc udp unix vless vmess vsock ws wss
+   listen : anytls http kcp mixed pxyproto redir redir6 smux sni socks5 ss tcp tls tproxy trojan trojanc udp unix vless vsock ws wss
+   forward: anytls direct http kcp reject simple-obfs smux socks4 socks4a socks5 ss ssh ssr tcp tls trojan trojanc udp unix vless vmess vsock ws wss
 
    Note: use 'glider -scheme all' or 'glider -scheme SCHEME' to see help info for the scheme.
 
@@ -333,6 +334,13 @@ Trojan client scheme:
 Trojan server scheme:
   trojan://pass@host:port?cert=PATH&key=PATH[&fallback=127.0.0.1]
   trojanc://pass@host:port[?fallback=127.0.0.1]     (cleartext, without TLS)
+
+--
+AnyTLS client scheme:
+  anytls://password@host:port[?serverName=SERVERNAME][&skipVerify=true][&cert=PATH][&synackTimeout=10s]
+
+AnyTLS server scheme:
+  anytls://password@host:port?cert=PATH&key=PATH
 
 --
 Unix domain socket scheme:

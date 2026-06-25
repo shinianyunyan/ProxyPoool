@@ -17,7 +17,6 @@ import (
 	_ "github.com/nadoo/glider/proxy/socks5"
 	_ "github.com/nadoo/glider/proxy/ss"
 	_ "github.com/nadoo/glider/proxy/ssh"
-	_ "github.com/nadoo/glider/proxy/ssr"
 	_ "github.com/nadoo/glider/proxy/tcp"
 	_ "github.com/nadoo/glider/proxy/tls"
 	_ "github.com/nadoo/glider/proxy/trojan"

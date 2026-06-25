@@ -6,7 +6,7 @@
 [![Actions Status](https://img.shields.io/github/actions/workflow/status/nadoo/glider/build.yml?branch=dev&style=flat-square)](https://github.com/nadoo/glider/actions)
 [![DockerHub](https://img.shields.io/docker/image-size/nadoo/glider?color=blue&label=docker&style=flat-square)](https://hub.docker.com/r/nadoo/glider)
 
-glider is a forward proxy with multiple protocols support, and also a dns/dhcp server with ipset management features(like dnsmasq).
+glider is a forward proxy with multiple protocols support, and also a dns/dhcp server with ipset management features.
 
 we can set up local listeners as proxy servers, and forward requests to internet via forwarders.
 
@@ -58,7 +58,6 @@ we can set up local listeners as proxy servers, and forward requests to internet
 |AnyTLSc        |√| |√|√|anytls cleartext(without tls)
 |VLESS          |√| |√|√|client & server
 |VMess          | | |√|√|client only
-|SSR            | | |√| |client only
 |SSH            | | |√| |client only
 |SOCKS4         | | |√| |client only
 |SOCKS4A        | | |√| |client only
@@ -120,7 +119,7 @@ OPTION:
   -checkdisabledonly
         check disabled fowarders only
   -checkinterval int
-        fowarder check interval(seconds) (default 30)
+        fowarder check interval(seconds) (default 30)ß
   -checklatencysamples int
         use the average latency of the latest N checks (default 10)
   -checktimeout int
@@ -200,7 +199,7 @@ URL:
 
 SCHEME:
    listen : anytls anytlsc http kcp mixed pxyproto redir redir6 smux sni socks5 ss tcp tls tproxy trojan trojanc udp unix vless vsock ws wss
-   forward: anytls anytlsc direct http kcp reject simple-obfs smux socks4 socks4a socks5 ss ssh ssr tcp tls trojan trojanc udp unix vless vmess vsock ws wss
+   forward: anytls anytlsc direct http kcp reject simple-obfs smux socks4 socks4a socks5 ss ssh tcp tls trojan trojanc udp unix vless vmess vsock ws wss
 
    Note: use 'glider -scheme all' or 'glider -scheme SCHEME' to see help info for the scheme.
 
@@ -303,10 +302,6 @@ SS scheme:
 SSH scheme:
   ssh://user[:pass]@host:port[?key=keypath&timeout=SECONDS]
     timeout: timeout of ssh handshake and channel operation, default: 5
-
---
-SSR scheme:
-  ssr://method:pass@host:port?protocol=xxx&protocol_param=yyy&obfs=zzz&obfs_param=xyz
 
 --
 TLS client scheme:

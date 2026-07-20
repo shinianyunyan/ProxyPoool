@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#08111f">
+  <title>Glider Control</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="ambient ambient-one" aria-hidden="true"></div>
+  <div class="ambient ambient-two" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Glider Control 首页">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" role="img">
+          <path d="M5 18.5 27 5l-8.5 22-3.8-8.2L5 18.5Z"></path>
+          <path d="m14.7 18.8 6.9-7.4"></path>
+        </svg>
+      </span>
+      <span>
+        <strong>Glider</strong>
+        <small>Control Center</small>
+      </span>
+    </a>
+    <div class="topbar-actions">
+      <span id="connectionState" class="connection-state">
+        <i></i><span>正在连接</span>
+      </span>
+      <button id="refreshButton" class="icon-button" type="button" title="刷新数据" aria-label="刷新数据">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 11a8.1 8.1 0 0 0-14.9-4M4 4v5h5M4 13a8.1 8.1 0 0 0 14.9 4M20 20v-5h-5"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">代理服务管理面板</p>
+        <h1>清晰掌控每一条连接</h1>
+        <p class="hero-copy">配置 glider、拉取指纹代理源，并查看每个代理的实时健康状态与延迟。</p>
+      </div>
+      <div class="hero-actions">
+        <button id="startButton" class="button button-primary" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z"></path></svg>
+          <span>启动服务</span>
+        </button>
+        <button id="stopButton" class="button button-danger" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"></rect></svg>
+          <span>停止服务</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="status-grid" aria-label="运行概览">
+      <article class="metric-card metric-status">
+        <div class="metric-icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h3l2-6 4 12 2-6h5"></path></svg>
+        </div>
+        <div>
+          <span class="metric-label">运行状态</span>
+          <strong id="runningStatus">检测中</strong>
+          <small id="uptime">等待服务响应</small>
+        </div>
+      </article>
+      <article class="metric-card">
+        <div class="metric-icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"></path></svg>
+        </div>
+        <div>
+          <span class="metric-label">监听地址</span>
+          <strong id="listenSummary">—</strong>
+          <div class="current-proxy-line">
+            <span id="currentProxySummary" class="current-proxy-summary">—</span>
+            <button id="currentProxyBlacklistButton" class="icon-button current-proxy-blacklist" type="button" aria-label="拉黑当前代理" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="m8 8 8 8"></path></svg>
+            </button>
+          </div>
+        </div>
+      </article>
+      <article class="metric-card">
+        <div class="metric-icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M8 12h8M10 17h4"></path></svg>
+        </div>
+        <div>
+          <span class="metric-label">代理总数</span>
+          <strong id="proxyCount">0</strong>
+          <small>已载入代理池</small>
+        </div>
+      </article>
+      <article class="metric-card">
+        <div class="metric-icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg>
+        </div>
+        <div>
+          <span class="metric-label">可用节点</span>
+          <strong id="healthyCount">0</strong>
+          <small id="healthyRate">glider 健康状态不可用</small>
+        </div>
+      </article>
+    </section>
+
+    <section class="workspace-grid">
+      <div class="workspace-main">
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <span class="section-kicker">Runtime</span>
+              <h2>运行配置</h2>
+            </div>
+            <button id="saveButton" class="button button-secondary button-small" type="button">保存配置</button>
+          </div>
+          <form id="settingsForm" class="settings-form">
+            <label class="field">
+              <span>监听地址</span>
+              <input id="listenInput" name="listen" type="text" value=":8443" placeholder="例如 :8443" autocomplete="off">
+              <small>glider 对外提供代理服务的入口</small>
+            </label>
+            <label class="field">
+              <span>负载策略</span>
+              <select id="strategyInput" name="strategy">
+                <option value="rr">轮询（rr）</option>
+                <option value="ha">高可用（ha）</option>
+                <option value="lha">延迟优先（lha）</option>
+                <option value="dh">目标哈希（dh）</option>
+              </select>
+              <small>决定流量如何分配到代理节点</small>
+            </label>
+            <label class="field field-wide">
+              <span>健康检查 URL</span>
+              <input id="checkInput" name="check" type="url" value="http://www.msftconnecttest.com/connecttest.txt#expect=200" placeholder="https://example.com/health#expect=200" autocomplete="off">
+              <small>支持 glider 的 <code>#expect=</code> 状态码格式</small>
+            </label>
+            <label class="field">
+              <span>检查间隔（秒）</span>
+              <input id="checkIntervalInput" name="checkInterval" type="number" value="30" min="1" max="86400" step="1">
+              <small>建议不低于 10 秒</small>
+            </label>
+          </form>
+        </article>
+
+        <article class="panel discovery-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="section-kicker">Discovery</span>
+              <div class="heading-with-help">
+                <h2>资产发现</h2>
+                <span class="config-path-help" tabindex="0" aria-label="查看当前提供方配置文件路径">?
+                  <span id="discoveryConfigPathTooltip" class="config-path-tooltip">正在读取配置路径…</span>
+                </span>
+              </div>
+            </div>
+            <div class="discovery-status">
+              <div class="provider-tabs" role="tablist" aria-label="资产搜索提供方">
+                <button class="provider-tab active" type="button" role="tab" aria-selected="true" data-provider="fofa">FOFA</button>
+                <button class="provider-tab" type="button" role="tab" aria-selected="false" data-provider="hunter">Hunter</button>
+              </div>
+              <span id="discoveryKeyState" class="key-state pending"><i></i>检测 Key</span>
+            </div>
+          </div>
+          <form id="discoveryForm" class="discovery-form">
+            <div class="provider-fields active" data-provider-fields="fofa">
+              <label class="field field-wide">
+                <span>FOFA 查询语句</span>
+                <input id="fofaQueryInput" name="fofaQuery" type="text" required placeholder='title="代理池网页管理界面"' autocomplete="off">
+                <small>FOFA 指纹语法，例如 <code>title="..."</code></small>
+              </label>
+              <label class="field field-wide">
+                <span>查询接口</span>
+                <input id="fofaEndpointInput" type="url" required value="https://fofa.info/api/v1/search/all" autocomplete="off">
+                <small>支持官方接口或 FOFA 兼容接口</small>
+              </label>
+              <label class="field">
+                <span>最大结果数</span>
+                <input id="fofaResultLimitInput" name="fofaResultLimit" type="number" value="100" min="1" max="500" step="1" required>
+              </label>
+              <label class="field">
+                <span>API Key</span>
+                <span class="secret-input-wrap">
+                  <input id="fofaKeyInput" type="password" autocomplete="off" placeholder="未配置则不调用 FOFA">
+                  <button id="toggleFofaKeyButton" class="secret-toggle" type="button">显示</button>
+                </span>
+                <small>保存到本地 <code>fofa.json</code></small>
+              </label>
+            </div>
+            <div class="provider-fields" data-provider-fields="hunter" hidden>
+              <label class="field field-wide">
+                <span>Hunter 查询语句</span>
+                <input id="hunterQueryInput" name="hunterQuery" type="text" required placeholder='web.title="代理池网页管理界面"' autocomplete="off">
+                <small>Hunter 使用 <code>web.title</code>、<code>web.body</code> 等字段</small>
+              </label>
+              <label class="field field-wide">
+                <span>查询接口</span>
+                <input id="hunterEndpointInput" type="url" required value="https://hunter.qianxin.com/openApi/search" autocomplete="off">
+                <small>默认使用 Hunter 官方 OpenAPI</small>
+              </label>
+              <label class="field">
+                <span>最大结果数</span>
+                <input id="hunterResultLimitInput" name="hunterResultLimit" type="number" value="100" min="1" max="500" step="1" required>
+              </label>
+              <label class="field">
+                <span>API Key</span>
+                <span class="secret-input-wrap">
+                  <input id="hunterKeyInput" type="password" autocomplete="off" placeholder="未配置则不调用 Hunter">
+                  <button id="toggleHunterKeyButton" class="secret-toggle" type="button">显示</button>
+                </span>
+                <small>保存到本地 <code>hunter.json</code></small>
+              </label>
+            </div>
+          </form>
+          <div class="discovery-actions">
+            <button id="saveDiscoveryButton" class="button button-secondary" type="button">保存 FOFA 配置</button>
+            <button id="discoverButton" class="button button-accent" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4M11 8v6M8 11h6"></path></svg>
+              <span>搜索并保存目标</span>
+            </button>
+            <span class="discovery-count">已保存 <strong id="discoveryTargetCount">0</strong> 个目标</span>
+          </div>
+          <div id="discoveryTargets" class="target-list" aria-live="polite">
+            <div class="target-placeholder">尚未发现目标</div>
+          </div>
+        </article>
+
+      </div>
+
+      <aside class="workspace-side">
+        <article class="panel source-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="section-kicker">Collector</span>
+              <h2>指纹代理源</h2>
+            </div>
+            <span class="feature-pill">自动应用</span>
+          </div>
+          <p class="panel-copy">系统会并发检查手工地址与资产发现目标的 <code>/proxies_status</code>，每个来源独立超时，并标记成功或失败。</p>
+          <label class="field">
+            <span>手工代理池地址 <small>可选</small></span>
+            <textarea id="sourcesInput" rows="7" placeholder="http://127.0.0.1:5000&#10;http://proxy-pool.example"></textarea>
+          </label>
+          <div class="source-options">
+            <label class="field">
+              <span>单源超时（秒）</span>
+              <input id="sourceTimeoutInput" type="number" min="1" max="120" value="10">
+              <small>每个来源独立计时，超时后继续其他来源</small>
+            </label>
+            <label class="field">
+              <span>并发来源数</span>
+              <select id="sourceConcurrencyInput">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="4">4</option>
+                <option value="8" selected>8</option>
+                <option value="16">16</option>
+                <option value="32">32</option>
+              </select>
+              <small>使用有界并发，避免同时请求过多目标</small>
+            </label>
+          </div>
+          <div class="synced-sources" aria-live="polite">
+            <div class="synced-sources-heading">
+              <span>拉取源状态</span>
+              <span>共 <strong id="discoveredSourceCount">0</strong> 个</span>
+            </div>
+            <div id="discoveredSources" class="synced-source-list">
+              <div class="synced-source-placeholder">填写手工来源或搜索目标后显示在这里</div>
+            </div>
+          </div>
+          <fieldset class="protocol-picker">
+            <legend>拉取协议</legend>
+            <label>
+              <input type="radio" name="protocol" value="socks5" checked>
+              <span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M15 8l4 4-4 4"></path></svg>
+                SOCKS5
+              </span>
+            </label>
+            <label>
+              <input type="radio" name="protocol" value="http">
+              <span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path></svg>
+                HTTP
+              </span>
+            </label>
+          </fieldset>
+          <button id="fetchButton" class="button button-accent button-block" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"></path></svg>
+            <span>拉取并应用到代理池</span>
+          </button>
+          <div id="fetchResult" class="fetch-result" hidden></div>
+        </article>
+
+        <article class="panel log-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="section-kicker">Activity</span>
+              <h2>运行日志</h2>
+            </div>
+            <button id="clearLogsButton" class="text-button" type="button">清空视图</button>
+          </div>
+          <div id="logOutput" class="log-output" role="log" aria-live="polite">
+            <div class="log-placeholder">等待日志输出…</div>
+          </div>
+        </article>
+      </aside>
+
+      <article class="panel proxy-panel">
+        <div class="panel-heading proxies-heading">
+          <div>
+            <span class="section-kicker">Pool</span>
+            <h2>代理池</h2>
+            <small class="heading-note">状态、延迟和失败次数均来自正在运行的 glider 健康检查。</small>
+          </div>
+          <div class="table-tools">
+            <label class="search-box">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+              <input id="proxySearch" type="search" placeholder="筛选地址或来源" aria-label="筛选代理">
+            </label>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th aria-sort="none"><button class="sort-button" type="button" data-sort="address">代理地址<span></span></button></th>
+                <th aria-sort="none"><button class="sort-button" type="button" data-sort="protocol">协议<span></span></button></th>
+                <th aria-sort="none"><button class="sort-button" type="button" data-sort="source">来源<span></span></button></th>
+                <th aria-sort="none"><button class="sort-button" type="button" data-sort="status">glider 状态<span></span></button></th>
+                <th aria-sort="none"><button class="sort-button" type="button" data-sort="latency">延迟<span></span></button></th>
+                <th aria-sort="none"><button class="sort-button" type="button" data-sort="failures">失败次数<span></span></button></th>
+                <th aria-sort="none"><button class="sort-button" type="button" data-sort="lastCheck">最近检查<span></span></button></th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="proxyTableBody">
+              <tr class="empty-row"><td colspan="8">正在载入代理列表…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="panel-footer proxy-pagination">
+          <span id="proxyTableMeta">共 0 个节点</span>
+          <div class="pagination-controls">
+            <label>每页
+              <select id="proxyPageSize">
+                <option value="10" selected>10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </label>
+            <button id="proxyPrevPage" class="text-button" type="button">上一页</button>
+            <span id="proxyPageInfo">1 / 1</span>
+            <button id="proxyNextPage" class="text-button" type="button">下一页</button>
+            <button id="reloadProxiesButton" class="text-button" type="button">重新载入</button>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <dialog id="blacklistConfirmDialog" class="confirm-dialog" aria-labelledby="blacklistConfirmTitle" aria-describedby="blacklistConfirmMessage">
+    <div class="confirm-dialog-content">
+      <div class="confirm-dialog-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"></circle><path d="m8 8 8 8"></path></svg>
+      </div>
+      <h2 id="blacklistConfirmTitle">确认拉黑当前代理</h2>
+      <p id="blacklistConfirmMessage"></p>
+      <div class="confirm-dialog-actions">
+        <button id="blacklistCancelButton" class="button button-secondary button-small" type="button">取消</button>
+        <button id="blacklistConfirmButton" class="button button-danger button-small" type="button">确认拉黑</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+</body>
+</html>

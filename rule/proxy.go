@@ -129,6 +129,7 @@ func (p *Proxy) Record(dialer proxy.Dialer, success bool) {
 			fwdr.IncFailures()
 			return
 		}
+		fwdr.markSelected()
 		fwdr.Enable()
 	}
 }

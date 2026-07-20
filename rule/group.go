@@ -97,6 +97,7 @@ func newFwdrGroup(name string, fwdrs []*Forwarder, c *Strategy) *FwdrGroup {
 	for _, f := range fwdrs {
 		f.AddHandler(p.onStatusChanged)
 	}
+	registerRuntimeGroup(p)
 
 	return p
 }
@@ -120,11 +121,13 @@ func (p *FwdrGroup) NextDialer(dstAddr string) proxy.Dialer {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
+	var fwdr *Forwarder
 	if len(p.avail) == 0 {
-		return p.fwdrs[atomic.AddUint32(&p.index, 1)%uint32(len(p.fwdrs))]
+		fwdr = p.fwdrs[atomic.AddUint32(&p.index, 1)%uint32(len(p.fwdrs))]
+	} else {
+		fwdr = p.next(dstAddr)
 	}
-
-	return p.next(dstAddr)
+	return fwdr
 }
 
 // Priority returns the active priority of dialer.
@@ -248,6 +251,7 @@ func (p *FwdrGroup) check(fwdr *Forwarder, checker Checker) {
 
 		elapsed, err := checker.Check(fwdr)
 		if err != nil {
+			fwdr.recordCheck(err)
 			if errors.Is(err, proxy.ErrNotSupported) {
 				fwdr.SetMaxFailures(0)
 				log.F("[check] %s: %s(%d), %s, stop checking", p.name, fwdr.Addr(), fwdr.Priority(), err)
@@ -267,6 +271,7 @@ func (p *FwdrGroup) check(fwdr *Forwarder, checker Checker) {
 
 		wait = 1
 		p.setLatency(fwdr, elapsed)
+		fwdr.recordCheck(nil)
 		log.F("[check] %s: %s(%d), SUCCESS. Elapsed: %dms, Latency: %dms.",
 			p.name, fwdr.Addr(), fwdr.Priority(), elapsed.Milliseconds(), time.Duration(fwdr.Latency()).Milliseconds())
 		fwdr.Enable()

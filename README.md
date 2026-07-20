@@ -1,4 +1,25 @@
-# [glider](https://github.com/nadoo/glider)
+# ProxyPool
+
+ProxyPool is a derivative distribution of [nadoo/glider](https://github.com/nadoo/glider)
+with a modern local GUI for discovering, validating, deduplicating, blacklisting,
+and applying proxy endpoints. Its fingerprint-source integration is based on the
+proxy collection logic from [gmeier909/socks5_proxy](https://github.com/gmeier909/socks5_proxy).
+
+The upstream glider core remains the forwarding engine. Upstream source files,
+license notices, and attribution are preserved in this repository; changes made
+for the ProxyPool GUI and proxy-source workflow are maintained in this fork.
+
+## Attribution and License
+
+- Forwarding core: [nadoo/glider](https://github.com/nadoo/glider)
+- Fingerprint proxy-source integration: [gmeier909/socks5_proxy](https://github.com/gmeier909/socks5_proxy)
+- See `LICENSE` and the upstream repositories for the applicable license terms.
+
+Runtime provider keys, proxy lists, blacklists, generated configs, and logs are
+local data and are intentionally excluded from version control. Configure them
+under the GUI data directory after starting the binary.
+
+## Upstream glider core
 
 [![Go Version](https://img.shields.io/github/go-mod/go-version/nadoo/glider?style=flat-square)](https://go.dev/dl/)
 [![Go Report Card](https://goreportcard.com/badge/github.com/nadoo/glider?style=flat-square)](https://goreportcard.com/report/github.com/nadoo/glider)
@@ -90,6 +111,117 @@ we can set up local listeners as proxy servers, and forward requests to internet
 - Source: `go install github.com/nadoo/glider@latest`
 
 ## Usage
+
+#### Web GUI
+
+The same binary can run a local management interface without changing the
+existing CLI workflow:
+
+```bash
+glider -gui
+```
+
+The Windows GUI package can also be started directly:
+
+```powershell
+.\glider-gui.exe
+```
+
+The GUI opens `http://127.0.0.1:8088` and provides:
+
+- glider start/stop controls and live process logs
+- listen, strategy, and health-check settings
+- FOFA and Hunter discovery with provider-specific queries and de-duplicated HTTP/HTTPS targets
+- proxy-source management for the `socks5_proxy` `/proxies_status` format
+- configurable per-source timeouts and bounded concurrent source fetching
+- per-source success/failure, response time, and eligible proxy counts
+- validated proxy filtering, de-duplication, persistence, pagination, sorting, blacklisting, and one-click apply
+- glider runtime availability, latency, failure count, last-check time, and the actual forwarder used by client traffic
+
+The source URLs present in `internal/proxysource/default_urls.txt` at build time
+are embedded as first-launch defaults, so the packaged binary does not need the
+source tree.
+After launch, sources are edited in the web interface. Managed settings, proxy
+data, and the generated glider config are stored in the selected GUI data
+directory.
+
+Asset discovery is intentionally a two-step action and never runs at startup:
+
+1. Start the GUI once. It creates `fofa.json` and `hunter.json` in the GUI data directory.
+2. Switch between the FOFA and Hunter tabs, then edit each provider's query,
+   API endpoint, result limit, and API key. The eye control reveals or masks
+   the key, and the `?` tooltip shows the active provider file. Both files have
+   this shape:
+
+   ```json
+   {
+     "endpoint": "https://fofa.info/api/v1/search/all",
+     "key": "replace-with-your-key"
+   }
+   ```
+
+   A custom endpoint path and its existing query parameters are preserved.
+   FOFA-compatible endpoints use `key`, `qbase64`, `fields`, and `size`.
+   Hunter uses `api-key`, `search`, `page`, `page_size`, and `is_web`; its
+   query syntax is stored separately. Keys remain plain text in the local
+   provider files so the loopback-only GUI can edit them in masked inputs.
+3. Select **Search and save targets** to
+   query every provider with a configured key. Matching targets are
+   de-duplicated by normalized URL and stored in `discovery-targets.json`.
+4. Select **Fetch and apply**. The GUI combines manual sources with the saved
+   discovery targets, concurrently requests `/proxies_status` with an
+   independent timeout per source, and restarts glider with the validated
+   proxies. Source success/failure and response time remain visible in the
+   collector panel.
+
+The collector still imports only entries whose upstream `/proxies_status`
+payload has `validated=true`. The proxy table then shows glider's own runtime
+forwarder health checks configured by `check`, `checkinterval`, `checktimeout`,
+and `maxfailures`. Runtime snapshots are stored beside the other GUI data in
+`runtime-status.json` while the managed glider process is running.
+
+The local file key takes precedence. For compatibility, an empty `key` can
+still fall back to the environment variables named by `fofaKeyEnv` and
+`hunterKeyEnv` in `settings.json` (defaults: `FOFA_KEY` and `HUNTER_KEY`).
+
+```powershell
+$env:FOFA_KEY = "your-fofa-api-key"
+$env:HUNTER_KEY = "your-hunter-api-key"
+.\glider-gui.exe
+```
+
+The packaged `glider-gui.exe` stores data beside itself by default:
+
+```text
+data\fofa.json
+data\hunter.json
+data\blacklist.json
+data\glider.log
+```
+
+`glider.log` is the persistent GUI and managed-process log. It is rotated at
+5 MiB and keeps three backup files, while the web view only reads a bounded
+tail so long-running sessions do not grow memory usage.
+
+The regular `glider -gui` CLI keeps using `%AppData%\glider-gui`. A custom
+location can be selected explicitly:
+
+```powershell
+.\glider-gui.exe -gui-data-dir .\data
+```
+
+This writes both provider configurations and all runtime data under `.\data`.
+
+Useful options:
+
+```bash
+glider -gui -gui-no-open
+glider -gui -gui-address 127.0.0.1:18088
+glider -gui -gui-data-dir /path/to/data
+```
+
+For safety, the unauthenticated management API only accepts a loopback listen
+address. The normal CLI remains unchanged.
 
 #### Run
 

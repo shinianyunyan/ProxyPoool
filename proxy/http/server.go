@@ -90,6 +90,7 @@ func (s *HTTP) servHTTPS(r *request, c net.Conn) {
 		return
 	}
 	defer rc.Close()
+	s.proxy.Record(dialer, true)
 
 	io.WriteString(c, "HTTP/1.1 200 Connection established\r\n\r\n")
 
@@ -112,6 +113,7 @@ func (s *HTTP) servHTTP(req *request, c *proxy.Conn) {
 		return
 	}
 	defer rc.Close()
+	s.proxy.Record(dialer, true)
 
 	buf := pool.GetBytesBuffer()
 	defer pool.PutBytesBuffer(buf)

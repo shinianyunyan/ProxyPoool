@@ -18,10 +18,24 @@ import (
 
 var (
 	version = "0.17.0"
-	config  = parseConfig()
 )
 
 func main() {
+	args := os.Args[1:]
+	if guiModeRequested(os.Args[0], args) {
+		if !guiFlagPresent(args) {
+			args = append([]string{"-gui"}, args...)
+		}
+		if err := runGUI(args); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
+	runGlider(parseConfig())
+}
+
+func runGlider(config *Config) {
 	// global rule proxy
 	pxy := rule.NewProxy(config.Forwards, &config.Strategy, config.rules)
 

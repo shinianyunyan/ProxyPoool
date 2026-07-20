@@ -87,6 +87,7 @@ func (s *Socks5) Serve(c net.Conn) {
 		return
 	}
 	defer rc.Close()
+	s.proxy.Record(dialer, true)
 
 	log.F("[socks5] %s <-> %s via %s", c.RemoteAddr(), tgt, dialer.Addr())
 

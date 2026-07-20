@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -18,15 +19,19 @@ type StatusHandler func(*Forwarder)
 // Forwarder associates with a `-forward` command, usually a dialer or a chain of dialers.
 type Forwarder struct {
 	proxy.Dialer
-	url         string
-	addr        string
-	priority    uint32
-	maxFailures uint32 // maxfailures to set to Disabled
-	disabled    uint32
-	failures    uint32
-	latency     int64
-	intface     string // local interface or ip address
-	handlers    []StatusHandler
+	url          string
+	addr         string
+	priority     uint32
+	maxFailures  uint32 // maxfailures to set to Disabled
+	disabled     uint32
+	failures     uint32
+	latency      int64
+	intface      string // local interface or ip address
+	handlers     []StatusHandler
+	statusMu     sync.RWMutex
+	lastCheck    time.Time
+	lastError    string
+	lastSelected time.Time
 }
 
 // ForwarderFromURL parses `forward=` command value and returns a new forwarder.
@@ -130,6 +135,7 @@ func (f *Forwarder) Failures() uint32 {
 // IncFailures increase the failuer count by 1.
 func (f *Forwarder) IncFailures() {
 	failures := atomic.AddUint32(&f.failures, 1)
+	markRuntimeDirty()
 	if f.MaxFailures() == 0 {
 		return
 	}
@@ -155,6 +161,7 @@ func (f *Forwarder) Enable() {
 		}
 	}
 	atomic.StoreUint32(&f.failures, 0)
+	markRuntimeDirty()
 }
 
 // Disable the forwarder.
@@ -164,6 +171,7 @@ func (f *Forwarder) Disable() {
 			h(f)
 		}
 	}
+	markRuntimeDirty()
 }
 
 // Enabled returns the status of forwarder.
@@ -203,4 +211,23 @@ func (f *Forwarder) Latency() int64 {
 // SetLatency sets the latency of forwarder.
 func (f *Forwarder) SetLatency(l int64) {
 	atomic.StoreInt64(&f.latency, l)
+	markRuntimeDirty()
+}
+
+func (f *Forwarder) recordCheck(err error) {
+	f.statusMu.Lock()
+	f.lastCheck = time.Now()
+	f.lastError = ""
+	if err != nil {
+		f.lastError = err.Error()
+	}
+	f.statusMu.Unlock()
+	markRuntimeDirty()
+}
+
+func (f *Forwarder) markSelected() {
+	f.statusMu.Lock()
+	f.lastSelected = time.Now()
+	f.statusMu.Unlock()
+	markRuntimeDirty()
 }

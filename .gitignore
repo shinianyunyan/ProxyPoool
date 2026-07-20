@@ -26,6 +26,10 @@
 dev*.go
 
 *_test.go
+!gui_test.go
+!internal/discovery/*_test.go
+!internal/guicore/*_test.go
+!internal/proxysource/*_test.go
 
 dist
 
@@ -39,3 +43,14 @@ config/rules.d/*.list
 glider
 /bak/
 /rules.d/
+
+# Local analysis and GUI runtime data
+.codegraph/
+/data/
+**/fofa.json
+**/hunter.json
+**/blacklist.json
+**/proxies.json
+**/runtime-status.json
+**/managed.conf
+**/*.log

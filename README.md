@@ -1,680 +1,122 @@
 # ProxyPool
 
-ProxyPool is a derivative distribution of [nadoo/glider](https://github.com/nadoo/glider)
-with a modern local GUI for discovering, validating, deduplicating, blacklisting,
-and applying proxy endpoints. Its fingerprint-source integration is based on the
-proxy collection logic from [gmeier909/socks5_proxy](https://github.com/gmeier909/socks5_proxy).
+一个面向本地代理池管理的 glider 二开版本。ProxyPool 将资产发现、指纹代理源采集、代理校验、去重、黑名单和 glider 转发服务整合到一个独立的本地 GUI 中。
 
-The upstream glider core remains the forwarding engine. Upstream source files,
-license notices, and attribution are preserved in this repository; changes made
-for the ProxyPool GUI and proxy-source workflow are maintained in this fork.
+[English version](README_EN.md)
 
-## Attribution and License
+## 项目定位
 
-- Forwarding core: [nadoo/glider](https://github.com/nadoo/glider)
-- Fingerprint proxy-source integration: [gmeier909/socks5_proxy](https://github.com/gmeier909/socks5_proxy)
-- See `LICENSE` and the upstream repositories for the applicable license terms.
+ProxyPool 不是通用云代理服务，也不会把你的查询密钥上传到第三方平台。它运行在本机，通过浏览器访问回环地址管理 glider，并把配置、代理池和日志保存在可控的数据目录中。
 
-Runtime provider keys, proxy lists, blacklists, generated configs, and logs are
-local data and are intentionally excluded from version control. Configure them
-under the GUI data directory after starting the binary.
+核心转发能力来自 [nadoo/glider](https://github.com/nadoo/glider)，代理源采集工作流参考了 [gmeier909/socks5_proxy](https://github.com/gmeier909/socks5_proxy)。ProxyPool 的 GUI、FOFA/Hunter 适配、采集调度、运行状态和持久化逻辑由本项目维护。
 
-## Upstream glider core
+## 主要创新
 
-[![Go Version](https://img.shields.io/github/go-mod/go-version/nadoo/glider?style=flat-square)](https://go.dev/dl/)
-[![Go Report Card](https://goreportcard.com/badge/github.com/nadoo/glider?style=flat-square)](https://goreportcard.com/report/github.com/nadoo/glider)
-[![GitHub release](https://img.shields.io/github/v/release/nadoo/glider.svg?style=flat-square&include_prereleases)](https://github.com/nadoo/glider/releases)
-[![Actions Status](https://img.shields.io/github/actions/workflow/status/nadoo/glider/build.yml?branch=dev&style=flat-square)](https://github.com/nadoo/glider/actions)
-[![DockerHub](https://img.shields.io/docker/image-size/nadoo/glider?color=blue&label=docker&style=flat-square)](https://hub.docker.com/r/nadoo/glider)
+- **双引擎资产发现**：FOFA 和 Hunter 可以分别配置，也可以同时调用；支持官方接口和兼容接口，自定义查询语句、接口地址、结果上限和本地密钥。
+- **目标合并与来源追踪**：FOFA/Hunter 返回的重复目标只保留一份，同时保留全部提供方标记，避免来源信息丢失。
+- **并发指纹源采集**：对手工源和资产发现目标使用有界并发；每个源都有独立超时、成功/失败、耗时和有效代理数量。
+- **严格代理去重**：按协议、规范化主机和端口跨源去重，处理协议大小写、域名尾点、IPv4-mapped IPv6 等情况。
+- **两层可用性状态**：采集端只接收上游标记为 `validated=true` 的代理；运行后再显示 glider 自身的健康检查、延迟、失败次数和最近检查时间。
+- **真实转发节点显示**：客户端实际建立连接后，顶部显示 glider 当前选中的真实代理，而不是仅显示监听地址。
+- **可控黑名单**：顶部当前代理和代理池列表均可拉黑/解除拉黑；拉黑代理不会再被应用到 glider 配置。
+- **面向长期运行的日志**：GUI 和托管 glider 输出写入 `glider.log`，按 5 MiB 轮转并保留 3 个备份；网页只读取有限尾部，避免日志无限占用内存。
+- **独立 Windows 运行包**：发布的 `glider-gui.exe` 内嵌 GUI 资源和默认采集源，不依赖源码目录；运行数据默认写入可执行文件旁的 `data` 目录。
 
-glider is a forward proxy with multiple protocols support, and also a dns/dhcp server with ipset management features.
+## 快速开始
 
-we can set up local listeners as proxy servers, and forward requests to internet via forwarders.
+### Windows GUI
 
-```bash
-                |Forwarder ----------------->|
-   Listener --> |                            | Internet
-                |Forwarder --> Forwarder->...|
-```
-
-## Features
-- Act as both proxy client and proxy server(protocol converter)
-- Flexible proxy & protocol chains
-- Load balancing with the following scheduling algorithm:
-  - rr: round robin
-  - ha: high availability 
-  - lha: latency based high availability
-  - dh: destination hashing
-- Rule & priority based forwarder choosing: [Config Examples](config/examples)
-- DNS forwarding server:
-  - dns over proxy
-  - force upstream querying by tcp
-  - association rules between dns and forwarder choosing
-  - association rules between dns and ipset
-  - dns cache support
-  - custom dns record
-- IPSet management (linux kernel version >= 2.6.32):
-  - add ip/cidrs from rule files on startup
-  - add resolved ips for domains from rule files by dns forwarding server
-- Serve http and socks5 on the same port
-- Periodical availability checking for forwarders
-- Send requests from specific local ip/interface
-- Services: 
-  - dhcpd: a simple dhcp server that can run in failover mode
-
-## Protocols
-
-<details>
-<summary>click to see details</summary>
-
-|Protocol       | Listen/TCP |  Listen/UDP | Forward/TCP | Forward/UDP | Description
-|:-:            |:-:|:-:|:-:|:-:|:-
-|Mixed          |√|√| | |http+socks5 server
-|HTTP           |√| |√| |client & server
-|SOCKS5         |√|√|√|√|client & server
-|SS             |√|√|√|√|client & server
-|Trojan         |√| |√|√|client & server
-|Trojanc        |√| |√|√|trojan cleartext(without tls)
-|AnyTLS         |√| |√|√|client & server
-|AnyTLSc        |√| |√|√|anytls cleartext(without tls)
-|VLESS          |√| |√|√|client & server
-|VMess          | | |√|√|client only
-|SSH            | | |√| |client only
-|SOCKS4         | | |√| |client only
-|SOCKS4A        | | |√| |client only
-|TCP            |√| |√| |tcp tunnel client & server
-|UDP            | |√| |√|udp tunnel client & server
-|TLS            |√| |√| |transport client & server
-|KCP            | |√|√| |transport client & server
-|Unix           |√|√|√|√|transport client & server
-|VSOCK          |√| |√| |transport client & server
-|Smux           |√| |√| |transport client & server
-|Websocket(WS)  |√| |√| |transport client & server
-|WS Secure      |√| |√| |websocket secure (wss)
-|Proxy Protocol |√| | | |version 1 server only
-|Simple-Obfs    | | |√| |transport client only
-|Redir          |√| | | |linux redirect proxy
-|Redir6         |√| | | |linux redirect proxy(ipv6)
-|TProxy         | |√| | |linux tproxy(udp only)
-|Reject         | | |√|√|reject all requests
-
-</details>
-
-## Install
-
-- Binary: [https://github.com/nadoo/glider/releases](https://github.com/nadoo/glider/releases)
-- Docker: `docker pull nadoo/glider`
-- Manjaro: `pamac install glider`
-- ArchLinux: `sudo pacman -S glider`
-- Homebrew: `brew install glider`
-- MacPorts: `sudo port install glider`
-- Source: `go install github.com/nadoo/glider@latest`
-
-## Usage
-
-#### Web GUI
-
-The same binary can run a local management interface without changing the
-existing CLI workflow:
-
-```bash
-glider -gui
-```
-
-The Windows GUI package can also be started directly:
+从 [Releases](https://github.com/shinianyunyan/ProxyPoool/releases) 下载 `glider-gui.exe`，然后运行：
 
 ```powershell
-.\glider-gui.exe
+.\\glider-gui.exe
 ```
 
-The GUI opens `http://127.0.0.1:8088` and provides:
+默认管理地址：`http://127.0.0.1:8088`
 
-- glider start/stop controls and live process logs
-- listen, strategy, and health-check settings
-- FOFA and Hunter discovery with provider-specific queries and de-duplicated HTTP/HTTPS targets
-- proxy-source management for the `socks5_proxy` `/proxies_status` format
-- configurable per-source timeouts and bounded concurrent source fetching
-- per-source success/failure, response time, and eligible proxy counts
-- validated proxy filtering, de-duplication, persistence, pagination, sorting, blacklisting, and one-click apply
-- glider runtime availability, latency, failure count, last-check time, and the actual forwarder used by client traffic
-
-The source URLs present in `internal/proxysource/default_urls.txt` at build time
-are embedded as first-launch defaults, so the packaged binary does not need the
-source tree.
-After launch, sources are edited in the web interface. Managed settings, proxy
-data, and the generated glider config are stored in the selected GUI data
-directory.
-
-Asset discovery is intentionally a two-step action and never runs at startup:
-
-1. Start the GUI once. It creates `fofa.json` and `hunter.json` in the GUI data directory.
-2. Switch between the FOFA and Hunter tabs, then edit each provider's query,
-   API endpoint, result limit, and API key. The eye control reveals or masks
-   the key, and the `?` tooltip shows the active provider file. Both files have
-   this shape:
-
-   ```json
-   {
-     "endpoint": "https://fofa.info/api/v1/search/all",
-     "key": "replace-with-your-key"
-   }
-   ```
-
-   A custom endpoint path and its existing query parameters are preserved.
-   FOFA-compatible endpoints use `key`, `qbase64`, `fields`, and `size`.
-   Hunter uses `api-key`, `search`, `page`, `page_size`, and `is_web`; its
-   query syntax is stored separately. Keys remain plain text in the local
-   provider files so the loopback-only GUI can edit them in masked inputs.
-3. Select **Search and save targets** to
-   query every provider with a configured key. Matching targets are
-   de-duplicated by normalized URL and stored in `discovery-targets.json`.
-4. Select **Fetch and apply**. The GUI combines manual sources with the saved
-   discovery targets, concurrently requests `/proxies_status` with an
-   independent timeout per source, and restarts glider with the validated
-   proxies. Source success/failure and response time remain visible in the
-   collector panel.
-
-The collector still imports only entries whose upstream `/proxies_status`
-payload has `validated=true`. The proxy table then shows glider's own runtime
-forwarder health checks configured by `check`, `checkinterval`, `checktimeout`,
-and `maxfailures`. Runtime snapshots are stored beside the other GUI data in
-`runtime-status.json` while the managed glider process is running.
-
-The local file key takes precedence. For compatibility, an empty `key` can
-still fall back to the environment variables named by `fofaKeyEnv` and
-`hunterKeyEnv` in `settings.json` (defaults: `FOFA_KEY` and `HUNTER_KEY`).
+启动服务后，可以使用 SOCKS5 入口测试：
 
 ```powershell
-$env:FOFA_KEY = "your-fofa-api-key"
-$env:HUNTER_KEY = "your-hunter-api-key"
-.\glider-gui.exe
+curl.exe -x socks5h://127.0.0.1:8443 http://cip.cc
 ```
 
-The packaged `glider-gui.exe` stores data beside itself by default:
+顶部“当前代理”会在客户端真正发起请求并被 glider 选中代理后显示；没有客户端连接时显示 `—` 是正常的。
+
+### GUI 参数
+
+```powershell
+.\\glider-gui.exe -gui-no-open
+.\\glider-gui.exe -gui-address 127.0.0.1:18088
+.\\glider-gui.exe -gui-data-dir D:\\ProxyPoolData
+```
+
+源码模式仍可使用：
+
+```powershell
+go run . -gui
+```
+
+## 使用流程
+
+1. 在 **FOFA** 或 **Hunter** 页面填写查询语句、查询接口、最大结果数和 API Key。
+2. 点击保存配置；配置文件路径可通过界面中的 `?` 查看。
+3. 点击搜索并保存目标。已配置的提供方会被调用，结果按规范化 URL 降重。
+4. 在 **指纹代理源** 页面调整源超时、并发数和 SOCKS5/HTTP 协议。
+5. 点击“拉取并应用到代理池”，系统会采集、筛选、去重并重载 glider。
+6. 在代理池中查看 glider 健康状态、延迟、失败次数、来源，并按列排序或分页。
+
+未配置 Key 的提供方不会被调用。Key 只保存在本地配置文件中；环境变量仅作为兼容性的备用来源。
+
+## 数据与安全
+
+默认数据目录：
 
 ```text
-data\fofa.json
-data\hunter.json
-data\blacklist.json
-data\glider.log
+data/
+  fofa.json
+  hunter.json
+  discovery-targets.json
+  proxies.json
+  blacklist.json
+  managed.conf
+  runtime-status.json
+  glider.log
 ```
 
-`glider.log` is the persistent GUI and managed-process log. It is rotated at
-5 MiB and keeps three backup files, while the web view only reads a bounded
-tail so long-running sessions do not grow memory usage.
+发布包不会包含真实 Key、代理列表、黑名单、生成配置或运行日志。请不要把这些运行时文件提交到 Git，也不要把 API Key 写入 README、Issue 或截图。
 
-The regular `glider -gui` CLI keeps using `%AppData%\glider-gui`. A custom
-location can be selected explicitly:
+管理接口默认只监听回环地址。若要让其他设备访问，请先自行增加认证和网络隔离，不要直接暴露未认证管理 API。
+
+## 构建与测试
+
+需要 Go 1.26：
 
 ```powershell
-.\glider-gui.exe -gui-data-dir .\data
+go test ./...
+go build -trimpath -ldflags "-s -w" -o dist\\glider-gui.exe
 ```
 
-This writes both provider configurations and all runtime data under `.\data`.
+前端脚本检查：
 
-Useful options:
-
-```bash
-glider -gui -gui-no-open
-glider -gui -gui-address 127.0.0.1:18088
-glider -gui -gui-data-dir /path/to/data
+```powershell
+node --check guiweb\\app.js
 ```
 
-For safety, the unauthenticated management API only accepts a loopback listen
-address. The normal CLI remains unchanged.
+## 作者、历史与致谢
 
-#### Run
+本仓库不是通过 GitHub Fork 按钮创建的，而是将上游代码拉取后在独立仓库中维护。因此 GitHub 的 Contributors 页面会保留 glider 原始提交历史中的作者，这是历史事实，不代表这些作者参与了 ProxyPool 的新增 GUI 和代理池功能。
 
-```bash
-glider -verbose -listen :8443
-# docker run --rm -it nadoo/glider -verbose -listen :8443
-```
+ProxyPool 新增代码由本项目维护者提交。`gmeier909` 不会被伪造成当前提交作者；其仓库在 GitHub 上没有声明可识别的开源许可证，因此本项目只在致谢中说明参考关系，没有把其 Python 文件直接作为本项目源码分发。如需直接复用该仓库的源码，应先取得原作者许可。
 
-#### Help
+感谢以下项目：
 
-<details>
-<summary><code>glider -help</code></summary>
+- [nadoo/glider](https://github.com/nadoo/glider)：代理转发、负载策略和健康检查核心。
+- [gmeier909/socks5_proxy](https://github.com/gmeier909/socks5_proxy)：代理池指纹源采集流程和 `/proxies_status` 数据约定的参考。
 
-```bash
-Usage: glider [-listen URL]... [-forward URL]... [OPTION]...
+更多边界说明见 [NOTICE](NOTICE)。
 
-  e.g. glider -config /etc/glider/glider.conf
-       glider -listen :8443 -forward socks5://serverA:1080 -forward socks5://serverB:1080 -verbose
+## 许可证
 
-OPTION:
-  -check string
-        check=tcp[://HOST:PORT]: tcp port connect check
-        check=http://HOST[:PORT][/URI][#expect=REGEX_MATCH_IN_RESP_LINE]
-        check=https://HOST[:PORT][/URI][#expect=REGEX_MATCH_IN_RESP_LINE]
-        check=file://SCRIPT_PATH: run a check script, healthy when exitcode=0, env vars: FORWARDER_ADDR,FORWARDER_URL
-        check=disable: disable health check (default "http://www.msftconnecttest.com/connecttest.txt#expect=200")
-  -checkdisabledonly
-        check disabled fowarders only
-  -checkinterval int
-        fowarder check interval(seconds) (default 30)ß
-  -checklatencysamples int
-        use the average latency of the latest N checks (default 10)
-  -checktimeout int
-        fowarder check timeout(seconds) (default 10)
-  -checktolerance int
-        fowarder check tolerance(ms), switch only when new_latency < old_latency - tolerance, only used in lha mode
-  -config string
-        config file path
-  -dialtimeout int
-        dial timeout(seconds) (default 3)
-  -dns string
-        local dns server listen address
-  -dnsalwaystcp
-        always use tcp to query upstream dns servers no matter there is a forwarder or not
-  -dnscachelog
-        show query log of dns cache
-  -dnscachesize int
-        max number of dns response in CACHE (default 4096)
-  -dnsmaxttl int
-        maximum TTL value for entries in the CACHE(seconds) (default 1800)
-  -dnsminttl int
-        minimum TTL value for entries in the CACHE(seconds)
-  -dnsnoaaaa
-        disable AAAA query
-  -dnsrecord value
-        custom dns record, format: domain/ip
-  -dnsserver value
-        remote dns server address
-  -dnstimeout int
-        timeout value used in multiple dnsservers switch(seconds) (default 3)
-  -example
-        show usage examples
-  -forward value
-        forward url, see the URL section below
-  -include value
-        include file
-  -interface string
-        source ip or source interface
-  -listen value
-        listen url, see the URL section below
-  -logflags int
-        do not change it if you do not know what it is, ref: https://pkg.go.dev/log#pkg-constants (default 19)
-  -maxfailures int
-        max failures to change forwarder status to disabled (default 3)
-  -relaytimeout int
-        relay timeout(seconds)
-  -rulefile value
-        rule file path
-  -rules-dir string
-        rule file folder
-  -scheme string
-        show help message of proxy scheme, use 'all' to see all schemes
-  -service value
-        run specified services, format: SERVICE_NAME[,SERVICE_CONFIG]
-  -strategy string
-        rr: Round Robin mode
-        ha: High Availability mode
-        lha: Latency based High Availability mode
-        dh: Destination Hashing mode (default "rr")
-  -tcpbufsize int
-        tcp buffer size in Bytes (default 32768)
-  -udpbufsize int
-        udp buffer size in Bytes (default 2048)
-  -verbose
-        verbose mode
+本项目沿用 glider 的 **GNU General Public License v3.0 (GPL-3.0)**，许可证全文见 [LICENSE](LICENSE)。当前许可证不是 MIT；由于项目包含 GPL-3.0 的 glider 核心，不能仅凭新增 GUI 就把整体改成 MIT。
 
-URL:
-   proxy: SCHEME://[USER:PASS@][HOST]:PORT
-   chain: proxy,proxy[,proxy]...
-
-    e.g. -listen socks5://:1080
-         -listen tls://:443?cert=crtFilePath&key=keyFilePath,http://    (protocol chain)
-
-    e.g. -forward socks5://server:1080
-         -forward tls://server.com:443,http://                          (protocol chain)
-         -forward socks5://serverA:1080,socks5://serverB:1080           (proxy chain)
-
-SCHEME:
-   listen : anytls anytlsc http kcp mixed pxyproto redir redir6 smux sni socks5 ss tcp tls tproxy trojan trojanc udp unix vless vsock ws wss
-   forward: anytls anytlsc direct http kcp reject simple-obfs smux socks4 socks4a socks5 ss ssh tcp tls trojan trojanc udp unix vless vmess vsock ws wss
-
-   Note: use 'glider -scheme all' or 'glider -scheme SCHEME' to see help info for the scheme.
-
---
-Forwarder Options: FORWARD_URL#OPTIONS
-   priority : the priority of that forwarder, the larger the higher, default: 0
-   interface: the local interface or ip address used to connect remote server.
-
-   e.g. -forward socks5://server:1080#priority=100
-        -forward socks5://server:1080#interface=eth0
-        -forward socks5://server:1080#priority=100&interface=192.168.1.99
-
-Services:
-   dhcpd: service=dhcpd,INTERFACE,START_IP,END_IP,LEASE_MINUTES[,MAC=IP,MAC=IP...]
-          service=dhcpd-failover,INTERFACE,START_IP,END_IP,LEASE_MINUTES[,MAC=IP,MAC=IP...]
-     e.g. service=dhcpd,eth1,192.168.1.100,192.168.1.199,720
-
---
-Help:
-   glider -help
-   glider -scheme all
-   glider -example
-
-see README.md and glider.conf.example for more details.
---
-glider 0.16.4, https://github.com/nadoo/glider (glider.proxy@gmail.com)
-```
-
-</details>
-
-#### Schemes
-
-<details>
-<summary><code>glider -scheme all</code></summary>
-
-```bash
-Direct scheme:
-  direct://
-
-Only needed when you want to specify the outgoing interface:
-  glider -verbose -listen :8443 -forward direct://#interface=eth0
-
-Or load balance multiple interfaces directly:
-  glider -verbose -listen :8443 -forward direct://#interface=eth0 -forward direct://#interface=eth1 -strategy rr
-
-Or you can use the high availability mode:
-  glider -verbose -listen :8443 -forward direct://#interface=eth0&priority=100 -forward direct://#interface=eth1&priority=200 -strategy ha
-
---
-Http scheme:
-  http://[user:pass@]host:port
-
---
-KCP scheme:
-  kcp://CRYPT:KEY@host:port[?dataShards=NUM&parityShards=NUM&mode=MODE]
-  
-Available crypt types for KCP:
-  none, sm4, tea, xor, aes, aes-128, aes-192, blowfish, twofish, cast5, 3des, xtea, salsa20
-  
-Available modes for KCP:
-  fast, fast2, fast3, normal, default: fast
-
---
-Simple-Obfs scheme:
-  simple-obfs://host:port[?type=TYPE&host=HOST&uri=URI&ua=UA]
-  
-Available types for simple-obfs:
-  http, tls
-
---
-Reject scheme:
-  reject://
-
---
-Smux scheme:
-  smux://host:port
-
---
-Socks4 scheme:
-  socks4://host:port
-
---
-Socks5 scheme:
-  socks5://[user:pass@]host:port
-
---
-SS scheme:
-  ss://method:pass@host:port
-  
-  Available methods for ss:
-    AEAD Ciphers:
-      AEAD_AES_128_GCM AEAD_AES_192_GCM AEAD_AES_256_GCM AEAD_CHACHA20_POLY1305 AEAD_XCHACHA20_POLY1305
-    Stream Ciphers:
-      AES-128-CFB AES-128-CTR AES-192-CFB AES-192-CTR AES-256-CFB AES-256-CTR CHACHA20-IETF XCHACHA20 CHACHA20 RC4-MD5
-    Alias:
-          chacha20-ietf-poly1305 = AEAD_CHACHA20_POLY1305, xchacha20-ietf-poly1305 = AEAD_XCHACHA20_POLY1305
-    Plain: NONE
-
---
-SSH scheme:
-  ssh://user[:pass]@host:port[?key=keypath&timeout=SECONDS]
-    timeout: timeout of ssh handshake and channel operation, default: 5
-
---
-TLS client scheme:
-  tls://host:port[?serverName=SERVERNAME][&skipVerify=true][&cert=PATH][&alpn=proto1][&alpn=proto2]
-  
-Proxy over tls client:
-  tls://host:port[?skipVerify=true][&serverName=SERVERNAME],scheme://
-  tls://host:port[?skipVerify=true],http://[user:pass@]
-  tls://host:port[?skipVerify=true],socks5://[user:pass@]
-  tls://host:port[?skipVerify=true],vmess://[security:]uuid@?alterID=num
-  
-TLS server scheme:
-  tls://host:port?cert=PATH&key=PATH[&alpn=proto1][&alpn=proto2]
-  
-Proxy over tls server:
-  tls://host:port?cert=PATH&key=PATH,scheme://
-  tls://host:port?cert=PATH&key=PATH,http://
-  tls://host:port?cert=PATH&key=PATH,socks5://
-  tls://host:port?cert=PATH&key=PATH,ss://method:pass@
-
---
-Trojan client scheme:
-  trojan://pass@host:port[?serverName=SERVERNAME][&skipVerify=true][&cert=PATH]
-  trojanc://pass@host:port     (cleartext, without TLS)
-  
-Trojan server scheme:
-  trojan://pass@host:port?cert=PATH&key=PATH[&fallback=127.0.0.1]
-  trojanc://pass@host:port[?fallback=127.0.0.1]     (cleartext, without TLS)
-
---
-AnyTLS client scheme:
-  anytls://password@host:port[?serverName=SERVERNAME][&skipVerify=true][&cert=PATH][&synackTimeout=10s]
-  anytlsc://password@host:port     (cleartext, without TLS)
-
-AnyTLS server scheme:
-  anytls://password@host:port?cert=PATH&key=PATH[&fallback=127.0.0.1:80]
-  anytlsc://password@host:port[?fallback=127.0.0.1:80]     (cleartext, without TLS)
-
---
-Unix domain socket scheme:
-  unix://path
-
---
-VLESS scheme:
-  vless://uuid@host:port[?fallback=127.0.0.1:80]
-
---
-VMess scheme:
-  vmess://[security:]uuid@host:port[?alterID=num]
-    if alterID=0 or not set, VMessAEAD will be enabled
-  
-  Available security for vmess:
-    zero, none, aes-128-gcm, chacha20-poly1305
-
---
-Websocket client scheme:
-  ws://host:port[/path][?host=HOST][&origin=ORIGIN]
-  wss://host:port[/path][?serverName=SERVERNAME][&skipVerify=true][&cert=PATH][&host=HOST][&origin=ORIGIN]
-  
-Websocket server scheme:
-  ws://:port[/path][?host=HOST]
-  wss://:port[/path]?cert=PATH&key=PATH[?host=HOST]
-  
-Websocket with a specified proxy protocol:
-  ws://host:port[/path][?host=HOST],scheme://
-  ws://host:port[/path][?host=HOST],http://[user:pass@]
-  ws://host:port[/path][?host=HOST],socks5://[user:pass@]
-  
-TLS and Websocket with a specified proxy protocol:
-  tls://host:port[?skipVerify=true][&serverName=SERVERNAME],ws://[@/path[?host=HOST]],scheme://
-  tls://host:port[?skipVerify=true],ws://[@/path[?host=HOST]],http://[user:pass@]
-  tls://host:port[?skipVerify=true],ws://[@/path[?host=HOST]],socks5://[user:pass@]
-  tls://host:port[?skipVerify=true],ws://[@/path[?host=HOST]],vmess://[security:]uuid@?alterID=num
-
---
-VM socket scheme(linux only):
-  vsock://[CID]:port
-
-  if you want to listen on any address, just set CID to 4294967295.
-```
-
-</details>
-
-#### Examples
-
-<details>
-<summary><code>glider -example</code></summary>
-
-```bash
-Examples:
-  glider -config glider.conf
-    -run glider with specified config file.
-  
-  glider -listen :8443 -verbose
-    -listen on :8443, serve as http/socks5 proxy on the same port, in verbose mode.
-
-  glider -listen socks5://:1080 -listen http://:8080 -verbose
-    -multiple listeners: listen on :1080 as socks5 proxy server, and on :8080 as http proxy server.
-  
-  glider -listen :8443 -forward direct://#interface=eth0 -forward direct://#interface=eth1
-    -multiple forwarders: listen on 8443 and forward requests via interface eth0 and eth1 in round robin mode.
-  
-  glider -listen tls://:443?cert=crtFilePath&key=keyFilePath,http:// -verbose
-    -protocol chain: listen on :443 as a https(http over tls) proxy server.
-  
-  glider -listen http://:8080 -forward socks5://serverA:1080,socks5://serverB:1080
-    -proxy chain: listen on :8080 as a http proxy server, forward all requests via forward chain.
-  
-  glider -listen :8443 -forward socks5://serverA:1080 -forward socks5://serverB:1080#priority=10 -forward socks5://serverC:1080#priority=10
-    -forwarder priority: serverA will only be used when serverB and serverC are not available.
-  
-  glider -listen tcp://:80 -forward tcp://serverA:80
-    -tcp tunnel: listen on :80 and forward all requests to serverA:80.
-  
-  glider -listen udp://:53 -forward socks5://serverA:1080,udp://8.8.8.8:53
-    -udp tunnel: listen on :53 and forward all udp requests to 8.8.8.8:53 via remote socks5 server.
-  
-  glider -verbose -dns=:53 -dnsserver=8.8.8.8:53 -forward socks5://serverA:1080 -dnsrecord=abc.com/1.2.3.4
-    -dns over proxy: listen on :53 as dns server, forward to 8.8.8.8:53 via socks5 server.
-```
-
-</details>
-
-
-## Config
-
-```bash
-glider -config CONFIG_PATH
-```
-
-- [ConfigFile](config)
-  - [glider.conf.example](config/glider.conf.example)
-  - [office.rule.example](config/rules.d/office.rule.example)
-- [Examples](config/examples)
-  - [transparent proxy with dnsmasq](config/examples/8.transparent_proxy_with_dnsmasq)
-  - [transparent proxy without dnsmasq](config/examples/9.transparent_proxy_without_dnsmasq)
-
-## Service
-
-- dhcpd / dhcpd-failover:
-  - service=dhcpd,INTERFACE,START_IP,END_IP,LEASE_MINUTES[,MAC=IP,MAC=IP...]
-    - service=dhcpd,eth1,192.168.1.100,192.168.1.199,720,fc:23:34:9e:25:01=192.168.1.101
-    - service=dhcpd-failover,eth2,192.168.2.100,192.168.2.199,720
-  - note: `dhcpd-failover` only serves requests when there's no other dhcp server exists in lan
-    - detect interval: 1min
-
-## Linux Daemon
-
-- systemd: [https://github.com/nadoo/glider/tree/main/systemd](https://github.com/nadoo/glider/tree/main/systemd)
-
-- <details> <summary>docker: click to see details</summary>
-
-  - run glider (config file path: /etc/glider/glider.conf)
-    ```
-    docker run -d --name glider --net host --restart=always \
-      -v /etc/glider:/etc/glider \
-      -v /etc/localtime:/etc/localtime:ro \
-      nadoo/glider -config=/etc/glider/glider.conf
-    ```
-  - run watchtower if you need auto update
-    ```
-    docker run -d --name watchtower --restart=always \
-      -v /var/run/docker.sock:/var/run/docker.sock \
-      containrrr/watchtower --interval 21600 --cleanup \
-      glider
-    ```
-  - open udp ports if you need udp nat fullcone
-    ```
-    iptables -I INPUT -p udp -m udp --dport 1024:65535 -j ACCEPT
-    ```
-  
-  </details>
-
-
-## Customize Build
-
-<details><summary>You can customize and build glider if you want a smaller binary (click to see details)</summary>
-
-
-1. Clone the source code:
-  ```bash
-  git clone https://github.com/nadoo/glider && cd glider
-  ```
-2. Customize features:
-
-  ```bash
-  open `feature.go` & `feature_linux.go`, comment out the packages you don't need
-  // _ "github.com/nadoo/glider/proxy/kcp"
-  ```
-
-3. Build it:
-  ```bash
-  go build -v -ldflags "-s -w"
-  ```
-
-</details>
-
-## Proxy & Protocol Chains
-<details><summary>In glider, you can easily chain several proxy servers or protocols together (click to see details)</summary>
-
-- Chain proxy servers:
-
-  ```bash
-  forward=http://1.1.1.1:80,socks5://2.2.2.2:1080,ss://method:pass@3.3.3.3:8443@
-  ```
-
-- Chain protocols: https proxy (http over tls)
-
-  ```bash
-  forward=tls://server.com:443,http://
-  ```
-
-- Chain protocols: vmess over ws over tls
-
-  ```bash
-  forward=tls://server.com:443,ws://,vmess://5a146038-0b56-4e95-b1dc-5c6f5a32cd98@?alterID=2
-  ```
-
-- Chain protocols and servers:
-
-  ``` bash
-  forward=socks5://1.1.1.1:1080,tls://server.com:443,vmess://5a146038-0b56-4e95-b1dc-5c6f5a32cd98@?alterID=2
-  ```
-
-- Chain protocols in listener: https proxy server
-
-  ``` bash
-  listen=tls://:443?cert=crtFilePath&key=keyFilePath,http://
-  ```
-
-- Chain protocols in listener: http over smux over websocket proxy server
-
-  ``` bash
-  listen=ws://:10000,smux://,http://
-  ```
-
-</details>
-
-## Links
-
-- [ipset](https://github.com/nadoo/ipset): netlink ipset package for Go.
-- [conflag](https://github.com/nadoo/conflag): a drop-in replacement for Go's standard flag package with config file support.
-- [ArchLinux](https://archlinux.org/packages/extra/x86_64/glider): a great linux distribution with glider pre-built package.
-- [urlencode](https://www.w3schools.com/tags/ref_urlencode.asp): you should encode special characters in scheme url. e.g., `@`->`%40`
+如果未来单独抽取完全独立、没有 GPL 代码依赖的新模块，可以再为该模块单独选择许可证；当前仓库整体按 GPL-3.0 发布。

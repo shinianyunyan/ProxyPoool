@@ -1,0 +1,18 @@
+ProxyPool attribution and licensing notice
+
+1. The forwarding engine and much of the protocol implementation are derived
+   from nadoo/glider:
+   https://github.com/nadoo/glider
+   The upstream project is licensed under GNU GPL v3.0. The repository LICENSE
+   file is retained and applies to this distribution as described there.
+
+2. The proxy-source collection workflow and /proxies_status data contract were
+   studied from gmeier909/socks5_proxy:
+   https://github.com/gmeier909/socks5_proxy
+   That repository does not declare an identifiable open-source license in its
+   GitHub metadata. ProxyPool does not vendor or redistribute its Python source;
+   obtain permission from the author before directly reusing that source.
+
+3. The ProxyPool GUI, FOFA/Hunter adapters, concurrent source collector,
+   normalization and deduplication, runtime status, blacklist handling, and
+   rolling file logging are maintained as this project's additions.

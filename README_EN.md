@@ -98,6 +98,6 @@ See [NOTICE](NOTICE) for the attribution and licensing boundary.
 
 ## License
 
-ProxyPool remains licensed under the **GNU General Public License v3.0 (GPL-3.0)** inherited from the glider core. See [LICENSE](LICENSE). It is not MIT: adding a GUI does not change the license obligations of the GPL-3.0 code included in the distribution.
+ProxyPool remains licensed under the **GNU General Public License v3.0 (GPL-3.0)** inherited from the glider core. See [LICENSE](LICENSE). 
 
 An independent module with no GPL code dependency could receive its own license in the future; the repository as a whole is released under GPL-3.0.
